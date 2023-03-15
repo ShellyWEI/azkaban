@@ -20,16 +20,20 @@ import azkaban.trigger.Condition;
 import azkaban.trigger.ConditionChecker;
 import azkaban.utils.TimeUtils;
 import azkaban.utils.Utils;
+import java.text.DateFormat;
+import java.text.ParseException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 import org.assertj.core.api.Assertions;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeUtils;
 import org.joda.time.DateTimeZone;
 import org.joda.time.ReadablePeriod;
 import org.junit.Test;
+import org.quartz.CronExpression;
 
 import static org.junit.Assert.*;
 
@@ -136,9 +140,9 @@ public class BasicTimeCheckerTest {
    */
   @Test
   public void testPSTtoPDTdst2() {
-
     // Use a Date that is before the date in cron expression (i.e. Before March 8 2020)
-    final DateTime pastTime = new DateTime(2020, 1, 1, 00, 00, 0, DateTimeZone.UTC);
+    final DateTime pastTime =
+        new DateTime(2020, 1, 1, 00, 00, 0, DateTimeZone.UTC);
 
     final String cronExpression = "0 30 2 8,9 3 ? 2020";
 
@@ -149,8 +153,34 @@ public class BasicTimeCheckerTest {
 
     final Condition cond = getCondition(timeChecker);
 
-    final DateTime aTime = new DateTime(2020, 3, 9, 2, 30, 0, DateTimeZone.forID("America/Los_Angeles"));
+    final DateTime aTime =
+        new DateTime(2020, 3, 9, 2, 30, 0, DateTimeZone.forID("America/Los_Angeles"));
     assertTrue(cond.getNextCheckTime() == aTime.getMillis());
+  }
+
+  @Test
+  public void testCronUnderUTC() throws ParseException {
+    DateTimeZone localTimeZone = DateTimeZone.forID("America/Los_Angeles");
+
+    // Use a Date that is before the date in cron expression (i.e. Before March 12 2020)
+    final DateTime pastTime =
+        new DateTime(2023, 1, 1, 00, 00, 0, localTimeZone);
+
+    // Cron expression for 2:30 am UTC on March 12 and 13, 2023
+    final String cronExpressionString = "0 30 2 12,13 3 ? 2023";
+    // user set cronExpression based on local time
+    CronExpression originalCronExpression = Utils.parseCronExpression(cronExpressionString, localTimeZone);
+    System.out.println("local cronExpression getNextCheckTime = "
+        + originalCronExpression.getNextValidTimeAfter(pastTime.toDate()));
+
+    // now switch to UTC
+    CronExpression newCronExpression = originalCronExpression;
+    newCronExpression.setTimeZone(TimeZone.getTimeZone(DateTimeZone.UTC.getID()));
+    Date nextValidTime = newCronExpression.getNextValidTimeAfter(pastTime.toDate());
+    // convert result in localTimeZone
+    DateTime dateTime = new DateTime( nextValidTime.getTime(), DateTimeZone.UTC);
+    dateTime.withZone(localTimeZone);
+    System.out.println("new cronExpression getNextCheckTime in local timezone = " + dateTime);
   }
 
   /**
